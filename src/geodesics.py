@@ -17,6 +17,7 @@ In all metrics that involve speed of light c, we assume c=1.
 """
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import scipy.integrate
 import scipy.linalg as SLA
 
@@ -78,16 +79,74 @@ def schwarzschild_metric_alt(x, r_s):
 def kerr_metric(x, r_s, a):
     """
     Kerr metric.  Conventions as above, though now we also have a := J / (M c) where J = angular momentum,
-    M = mass of the object, r_s = 2 G M / c^2.  (Though we assume c = 1.)
+    M = mass of the object, r_s = 2 G M / c^2 (though we assume c = 1).
     (presumably positive J means CCW about z axis if looking down "from above" in right-handed coordinates?)
+
+    Coordinates are (t, r, theta, phi) but they are Boyer-Lindquist coordinates.  In particular, if you want
+    to convert to Cartesian, you have:
+    x = sqrt(r^2 + a^2) sin theta cos phi
+    y = sqrt(r^2 + a^2) sin theta sin phi
+    z = r cos theta
 
     We let Sigma = r^2 + a^2 cos^2 theta
     Delta = r^2 - r_s r + a^2
 
     Note that the Kerr metric is not quite diagonal: there is a dt dphi cross-term.  In particular, return
     values are not just diagonals.
+
     """
-    assert False, "Not yet implemented"
+    g = np.zeros((4,4))
+    derivs = np.zeros((4,4,4))
+    r = x[1]
+    theta = x[2]
+    #costheta = np.cos(theta)
+    sintheta = np.sin(theta)
+    sin2theta = sintheta * sintheta
+    cos2theta = 1 - sin2theta
+    a2 = a * a
+    r2 = r * r
+    r2pa2 = r2 + a2
+    Sigma = r2 + a2 * cos2theta
+    Delta = r2pa2 - r_s * r
+    rsr_over_Sigma = r_s * r / Sigma
+    g[0,0] = -(1 - rsr_over_Sigma)
+    g[1,1] = Sigma / Delta
+    g[2,2] = Sigma
+    g[3,3] = (r2pa2 + rsr_over_Sigma * a2 * sin2theta) * sin2theta
+    g[0,3] = -(2 * rsr_over_Sigma * a * sin2theta)
+    g[3,0] = g[0,3]
+
+    # Now, the partial derivatives.
+    # There is no dependence on t or phi, so those derivs are 0.
+    # d/dr:
+    Sigmap = 2 * r
+    Deltap = 2 * r - r_s
+    rsr_over_Sigmap = r_s * (Sigma - r * Sigmap) / (Sigma * Sigma)
+    derivs[1,0,0] = rsr_over_Sigmap
+    derivs[1,1,1] = (Delta * Sigmap - Sigma * Deltap) / (Delta * Delta)
+    derivs[1,2,2] = Sigmap
+    derivs[1,3,3] = (2 * r + rsr_over_Sigmap * a2 * sin2theta) * sin2theta
+    derivs[1,0,3] = -(2 * rsr_over_Sigmap * a * sin2theta)
+    derivs[1,3,0] = derivs[1,0,3]
+
+    # d/dtheta
+    # (sin^2 theta)' = 2 sin theta cos theta = sin(2 theta)
+    # (cos^2 theta)' = -2 sin theta cos theta = - sin(2 theta)
+    sin2thetap = np.sin(2 * theta) # (sin^2 theta)'
+    cos2thetap = -sin2thetap
+    Sigmap = a2 * cos2thetap
+    # Deltap would be 0
+    # (r_s r / Sigma)' = - r_s r / Sigma^2 * Sigma'
+    rsr_over_Sigmap = -rsr_over_Sigma * Sigmap / Sigma
+    derivs[2,0,0] = rsr_over_Sigmap
+    derivs[2,1,1] = Sigmap / Delta
+    derivs[2,2,2] = Sigmap
+    derivs[2,3,3] = ( a2 * (rsr_over_Sigmap * sin2theta + rsr_over_Sigma * sin2thetap) * sin2theta +
+                      (r2pa2 + rsr_over_Sigma * a2 * sin2theta) * sin2thetap )
+    derivs[2,0,3] = -2 * a * (rsr_over_Sigmap  * sin2theta + rsr_over_Sigma * sin2thetap)
+    derivs[2,3,0] = derivs[2,0,3]
+
+    return g, derivs
 
 def poincare_upper_half_plane(x_):
     """
@@ -286,7 +345,7 @@ def test0():
 # different coordinate system would let us look at what happens after it passes
 # the event horizon.
 #
-# At r = 2 r_s, there's a subliminal velocity that gives us a circular orbit,
+# At r = 2 r_s, there's a subluminal velocity that gives us a circular orbit,
 # but it's unstable: any slower and we get sucked in, any faster and we escape.
 # (We need r > 3 r_s to get a stable circular orbit.)
 # r = 1.5 r_s is where light can be in a circular orbit.
@@ -340,6 +399,77 @@ def test1():
 
     plt.polar(phi, r)
     plt.show()
+
+def param_plot3d(x,y,z):
+    fig = plt.figure()
+    ax = fig.gca(projection='3d')
+    ax.plot(x,y,z)
+    plt.show()
+
+
+# Kerr:
+# Strange example 1:
+# Starts spinning in direction of black hole as it approaches, even gets r < r_s (though not
+# r_xy < r_s), and then gets flung out?
+# Example 2:
+# Picks up speed?  Radius bounces between 2-ish and ever larger values.  Those larger values
+# grow slowly because it's only when you're close that you "absorb" some of the angular momentum.
+# Example 3:
+# Starts out orbiting in opposite direction, slows down, gets pulled in, starts spinning
+# really fast (with r_xy a little below r_s) and theta diverges from pi/2 (which can only
+# be from numerical error)
+# Example 4: phidot 0 at first, but some (negative) thetadot.
+# Viewed from above, it starts rotating *CW* a little at first, then gets sucked in (and
+# is starting to orbit CCW as this happens).
+def test_kerr():
+    r_s = 1
+    a = 0.3 # J / (M c)
+    metric = kerr_metric
+    extra_params = [r_s, a]
+    r, phidot, thetadot, max_s = 2., 0.3, 0, 100 # escapes
+    r, phidot, thetadot, max_s = 2., -0.3, 0, 100 # escapes, but after more angle goes by, but less time?
+    r, phidot, thetadot, max_s = 2., 0, 0, 7 # Strange 1 (see above)
+    r, phidot, thetadot, max_s = 2., 0.25, 0, 10000 # Example 2
+    r, phidot, thetadot, max_s = 2., -0.25, 0, 1000 # Example 3
+    r, phidot, thetadot, max_s = 2., 0, -0.25, 20 # Example 4
+    r, phidot, thetadot, max_s = 2., 0, -0.3, 20 # Example 4
+
+    x0 = np.array([0., r, np.pi/2, 0.])
+    xdot0 = np.array([1., 0., thetadot, phidot])
+    print(f"init ds^2 (negative is timelike) = {eval_metric(metric, extra_params, x0, xdot0)}")
+
+    max_step_size = 0.1
+    #max_step_size = None
+    x_xdot, s_values = solve(metric, extra_params, x0, xdot0, max_s,
+                                  max_step_size=max_step_size)
+    t = x_xdot[:,0]
+    r = x_xdot[:,1]
+    theta = x_xdot[:,2]
+    phi = x_xdot[:,3]
+    assert thetadot != 0 or np.allclose(theta, np.pi / 2)
+    print(f"Last r = {r[-1]}")
+
+    # The variable names in Boyer-Lindquist coordinates are a little confusing because
+    # the thing they call r doesn't yield (x,y) in the way you'd expect.
+    r_xy = np.sqrt(r * r + a * a)
+    x = r_xy * np.sin(theta) * np.cos(phi)
+    y = r_xy * np.sin(theta) * np.sin(phi)
+    z = r * np.cos(theta)
+
+    param_plot3d(x,y,z)
+
+    plt.polar(phi, r_xy)
+    plt.show()
+
+    plt.polar(phi, r)
+    plt.show()
+
+    plt.plot(t, x)
+    plt.plot(t, y)
+    plt.plot(t, z)
+    plt.legend(['x', 'y', 'z'])
+    plt.show()
+
 
 if __name__ == "__main__":
     test1()

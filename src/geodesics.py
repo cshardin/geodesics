@@ -109,11 +109,13 @@ def kerr_metric(x, r_s, a):
     Sigma = r2 + a2 * cos2theta
     Delta = r2pa2 - r_s * r
     rsr_over_Sigma = r_s * r / Sigma
+    # Note that off-diagonal entries contribute a dt dphi and dphi dt term, so the coeffs
+    # there are half the coeff of dt dphi you see in written formulas.
     g[0,0] = -(1 - rsr_over_Sigma)
     g[1,1] = Sigma / Delta
     g[2,2] = Sigma
     g[3,3] = (r2pa2 + rsr_over_Sigma * a2 * sin2theta) * sin2theta
-    g[0,3] = -(2 * rsr_over_Sigma * a * sin2theta)
+    g[0,3] = -(rsr_over_Sigma * a * sin2theta)
     g[3,0] = g[0,3]
 
     # Now, the partial derivatives.
@@ -126,7 +128,7 @@ def kerr_metric(x, r_s, a):
     derivs[1,1,1] = (Delta * Sigmap - Sigma * Deltap) / (Delta * Delta)
     derivs[1,2,2] = Sigmap
     derivs[1,3,3] = (2 * r + rsr_over_Sigmap * a2 * sin2theta) * sin2theta
-    derivs[1,0,3] = -(2 * rsr_over_Sigmap * a * sin2theta)
+    derivs[1,0,3] = -(rsr_over_Sigmap * a * sin2theta)
     derivs[1,3,0] = derivs[1,0,3]
 
     # d/dtheta
@@ -143,7 +145,7 @@ def kerr_metric(x, r_s, a):
     derivs[2,2,2] = Sigmap
     derivs[2,3,3] = ( a2 * (rsr_over_Sigmap * sin2theta + rsr_over_Sigma * sin2thetap) * sin2theta +
                       (r2pa2 + rsr_over_Sigma * a2 * sin2theta) * sin2thetap )
-    derivs[2,0,3] = -2 * a * (rsr_over_Sigmap  * sin2theta + rsr_over_Sigma * sin2thetap)
+    derivs[2,0,3] = -a * (rsr_over_Sigmap  * sin2theta + rsr_over_Sigma * sin2thetap)
     derivs[2,3,0] = derivs[2,0,3]
 
     return g, derivs
@@ -408,6 +410,7 @@ def param_plot3d(x,y,z):
 
 
 # Kerr:
+# Examples below could be bogus; they were based on a buggy implementation
 # Strange example 1:
 # Starts spinning in direction of black hole as it approaches, even gets r < r_s (though not
 # r_xy < r_s), and then gets flung out?

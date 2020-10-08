@@ -324,6 +324,38 @@ def test_apply_christoffel_poincare():
     res = apply_christoffel(g, derivs, u, v)
     res_ = apply_christoffel(g_, derivs_, u, v)
 
+def test_metric(metric, extra_params, x, epsilon=1e-5):
+    """
+    Numerically differentiate a metric at a point to see how it compares to the `derivs`
+    values it returns.
+    """
+    (n,) = x.shape
+    g, derivs = metric(x, *extra_params)
+    direction = np.random.randn(n)
+    def g_(delta):
+        return metric(x + delta * direction, *extra_params)[0]
+    num_directional_deriv = (-g_(2*epsilon) + 8 * g_(epsilon)
+                             - 8 * g_(-epsilon) + g_(-2*epsilon))/(12 * epsilon)
+    directional_deriv = np.einsum('d,dij->ij', direction, derivs)
+    print(directional_deriv)
+    print(num_directional_deriv)
+    print(num_directional_deriv - directional_deriv)
+
+def test_some_metrics():
+    metric = poincare_upper_half_plane_alt
+    extra_params = []
+    x = np.array([0.3, 0.44])
+    test_metric(metric, extra_params, x)
+
+    metric = kerr_metric
+    r_s = 0.9
+    a = 0.3 # J / (M c)
+    extra_params = [r_s, a]
+    x = np.array([0.3, 1.44, 0.7, 0.81])
+    test_metric(metric, extra_params, x)
+
+
+
 
 def test0():
     metric = poincare_upper_half_plane
@@ -406,21 +438,32 @@ def param_plot3d(x,y,z):
     fig = plt.figure()
     ax = fig.gca(projection='3d')
     ax.plot(x,y,z)
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
     plt.show()
 
+def get_4momentum(metric, extra_params, x_xdot, mass):
+    (two_n,) = x_xdot.shape
+    n = two_n // n
+    x = x_xdot[:n]
+    xdot = x_xdot[n:]
+    g, _derivs = metric(x, *extra_params)
+    # normalize w.r.t. tau to get 4 velocity u^alpha
+    # then multiply by mass to get 4 momentum p^alpha (with index raised)
+    # then lower index using metric
+    assert False, "Not yet implemented"
 
 # Kerr:
 # Examples below could be bogus; they were based on a buggy implementation
 # Strange example 1:
-# Starts spinning in direction of black hole as it approaches, even gets r < r_s (though not
-# r_xy < r_s), and then gets flung out?
+# Starts spinning in direction of black hole as it approaches, but gets sucked in
+
 # Example 2:
-# Picks up speed?  Radius bounces between 2-ish and ever larger values.  Those larger values
-# grow slowly because it's only when you're close that you "absorb" some of the angular momentum.
+# orbits several times (with radius going between 2ish and 8ish) and eventually gets sucked
+# in
 # Example 3:
-# Starts out orbiting in opposite direction, slows down, gets pulled in, starts spinning
-# really fast (with r_xy a little below r_s) and theta diverges from pi/2 (which can only
-# be from numerical error)
+# Starts out orbiting CW, slows down, gets pulled in, starts orbiting CCW and gets sucked in
 # Example 4: phidot 0 at first, but some (negative) thetadot.
 # Viewed from above, it starts rotating *CW* a little at first, then gets sucked in (and
 # is starting to orbit CCW as this happens).
@@ -431,7 +474,7 @@ def test_kerr():
     extra_params = [r_s, a]
     r, phidot, thetadot, max_s = 2., 0.3, 0, 100 # escapes
     r, phidot, thetadot, max_s = 2., -0.3, 0, 100 # escapes, but after more angle goes by, but less time?
-    r, phidot, thetadot, max_s = 2., 0, 0, 7 # Strange 1 (see above)
+    r, phidot, thetadot, max_s = 2., 0, 0, 7 # Example 1 (see above)
     r, phidot, thetadot, max_s = 2., 0.25, 0, 10000 # Example 2
     r, phidot, thetadot, max_s = 2., -0.25, 0, 1000 # Example 3
     r, phidot, thetadot, max_s = 2., 0, -0.25, 20 # Example 4
@@ -461,7 +504,7 @@ def test_kerr():
 
     param_plot3d(x,y,z)
 
-    plt.polar(phi, r_xy)
+    plt.polar(phi, r_xy * np.sin(theta))
     plt.show()
 
     plt.polar(phi, r)

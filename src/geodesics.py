@@ -445,14 +445,19 @@ def param_plot3d(x,y,z):
 
 def get_4momentum(metric, extra_params, x_xdot, mass):
     (two_n,) = x_xdot.shape
-    n = two_n // n
+    n = two_n // 2
     x = x_xdot[:n]
     xdot = x_xdot[n:]
     g, _derivs = metric(x, *extra_params)
     # normalize w.r.t. tau to get 4 velocity u^alpha
     # then multiply by mass to get 4 momentum p^alpha (with index raised)
     # then lower index using metric
-    assert False, "Not yet implemented"
+    dtau = np.sqrt(-(xdot.dot(g).dot(xdot)))
+    u = xdot / dtau
+    assert np.isclose(u.dot(g).dot(u), -1)
+    momentum_vec = mass * u
+    momentum_covec = g.dot(momentum_vec)
+    return momentum_covec
 
 # Kerr:
 # Examples below could be bogus; they were based on a buggy implementation
@@ -515,6 +520,15 @@ def test_kerr():
     plt.plot(t, z)
     plt.legend(['x', 'y', 'z'])
     plt.show()
+
+    mass = 1
+    momenta = np.array([get_4momentum(metric, extra_params, x_xdot[i,:], mass)
+                        for i in range(x_xdot.shape[0])])
+    plt.plot(momenta)
+    plt.legend(['rho_t', 'rho_r', 'rho_theta', 'rho_phi'])
+    plt.grid()
+    plt.show()
+    # rho_t and rho_phi should be invariants
 
 
 if __name__ == "__main__":
